@@ -12,14 +12,6 @@ The project follows the [PyTorch Chatbot Tutorial](https://pytorch.org/tutorials
 - Performance profiling and optimization
 - TorchScript conversion for production deployment
 
-## Features
-
-- ✨ **Seq2Seq Architecture**: Encoder-decoder model with Luong attention mechanism
-- 🔧 **Hyperparameter Optimization**: Integration with Weights & Biases for systematic hyperparameter tuning
-- 📊 **Performance Profiling**: PyTorch Profiler integration for analyzing time and memory consumption
-- ⚡ **TorchScript Conversion**: Model optimization through TorchScript for improved inference speed (~1.93x faster)
-- 💬 **Interactive Chat**: Real-time conversation capability with the trained model
-- 📈 **Experiment Tracking**: Complete logging and visualization of training metrics
 
 ## Requirements
 
