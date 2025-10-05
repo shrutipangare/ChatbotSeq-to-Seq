@@ -2,26 +2,6 @@
 
 A PyTorch implementation of a conversational chatbot using sequence-to-sequence architecture with Luong attention mechanisms, trained on the Cornell Movie Dialogs Corpus.
 
-![Hyperparameter Sweep](W&B Chart 3_17_2025, 10_04_52 PM.png)
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Dataset](#dataset)
-- [Model Architecture](#model-architecture)
-- [Training](#training)
-- [Hyperparameter Tuning Results](#hyperparameter-tuning-results)
-- [Performance Optimization](#performance-optimization)
-- [Usage](#usage)
-- [Results](#results)
-- [Project Structure](#project-structure)
-- [References](#references)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
-- [Contributing](#contributing)
 
 ## Overview
 
@@ -150,46 +130,60 @@ Hyperparameter optimization was performed using Weights & Biases Sweeps with the
 
 ### Key Findings
 
-![Parallel Coordinates Plot]([images/hyperparameter_sweep.png](https://github.com/shrutipangare/ChatbotSeq-to-Seq/blob/main/W%26B%20Chart%203_17_2025%2C%2010_04_52%20PM.png))
+![Parallel Coordinates Plot](https://github.com/shrutipangare/ChatbotSeq-to-Seq/blob/main/W%26B%20Chart%203_17_2025%2C%2010_04_52%20PM.png)
 *Parallel coordinates visualization showing the relationship between hyperparameters and final loss*
 
-![Training Loss Curves]([images/training_loss.png](https://github.com/shrutipangare/ChatbotSeq-to-Seq/blob/main/W%26B%20Chart%203_17_2025%2C%2010_11_47%20PM.png))
+![Training Loss Curves](images/training_loss.png)
 *Loss curves across different hyperparameter configurations showing convergence patterns*
 
-Based on W&B sweeps, the most impactful hyperparameters were:
+Based on W&B sweeps, the most impactful hyperparameters were identified through systematic experimentation:
 
 1. **Gradient Clipping (`clip`)**
    - Range tested: 10-100
-   - Impact: Significant effect on convergence stability
-   - Optimal: ~50
+   - Impact: Highest importance - critical for convergence stability
+   - Optimal: 25-50
 
-2. **Teacher Forcing Ratio (`teacher_forcing_ratio`)**
-   - Range tested: 0.5-1.0
-   - Impact: Critical for balancing training stability and model generalization
-   - Optimal: ~1.0 (early training), gradually reduced
-
-3. **Learning Rate (`learning_rate`)**
+2. **Learning Rate (`learning_rate`)**
    - Range tested: 0.0001-0.001
-   - Impact: Key factor in optimization speed and final loss
-   - Optimal: ~0.0001 with SGD optimizer
+   - Impact: High importance - key factor in optimization speed and final loss
+   - Optimal: 0.00025
 
-4. **Optimizer**
+3. **Teacher Forcing Ratio (`teacher_forcing_ratio`)**
+   - Range tested: 0.5-1.0
+   - Impact: High importance - balances training stability and model generalization
+   - Optimal: 0.5
+
+4. **Decoder Learning Ratio (`decoder_learning_ratio`)**
+   - Range tested: 1.0-10.0
+   - Impact: Moderate importance
+   - Optimal: 3.0-5.0
+
+5. **Optimizer**
    - Tested: SGD vs Adam
-   - Finding: SGD with proper learning rate showed better final performance
+   - Finding: Adam optimizer showed better performance for this task
 
 ### Best Configuration
 
 ```python
 best_config = {
-    'clip': 50.0,
-    'decoder_learning_ratio': 5.0,
-    'learning_rate': 0.0001,
-    'optimizer': 'sgd',
-    'teacher_forcing_ratio': 1.0,
+    'clip': 25-50,
+    'decoder_learning_ratio': 3.0-5.0,
+    'learning_rate': 0.00025,
+    'optimizer': 'adam',
+    'teacher_forcing_ratio': 0.5,
     'hidden_size': 500,
+    'encoder_n_layers': 2,
+    'decoder_n_layers': 2,
     'dropout': 0.1
 }
 ```
+
+### Parameter Importance Analysis
+
+According to the W&B parameter importance chart:
+- **`_items.clip`**: Highest correlation with final loss
+- **`clip`**: Second highest importance
+- **`_items.learning_rate`** and **`learning_rate`**: Significant impact on convergence
 
 ## Performance Optimization
 
@@ -222,23 +216,47 @@ The trained model was converted to TorchScript for production deployment:
 ```python
 traced_model = torch.jit.trace(model, example_inputs)
 ```
-- Pros: Faster, simpler
-- Cons: Doesn't capture control flow
+- Works by running your model once with example inputs, recording the operations that occur, and creating a static graph of these operations
+- Pros: Faster, simpler, effective for models with static control flow
+- Cons: Has limitations - doesn't capture dynamic control flow
+- **Use case**: Works well for encoder steps with fixed operations
 
 **Scripting:**
 ```python
 scripted_model = torch.jit.script(model)
 ```
-- Pros: Preserves control flow, more flexible
-- Cons: Slightly slower compilation
+- Directly analyzes and compiles your Python code to TorchScript, preserving dynamic control flow
+- Pros: Offers more comprehensive compilation, preserves control flow, more flexible
+- Cons: Slightly slower compilation, requires TorchScript-compatible code
+- **Use case**: Necessary for the decoder where generation behavior depends on previous outputs
+
+#### Key Modifications for TorchScript Conversion
+
+1. **Type Annotations**: Add explicit type annotations to methods and function parameters to help the TorchScript compiler understand tensor shapes and types
+
+2. **Control Flow Compatibility**: Replace Python-specific control flows with TorchScript-compatible alternatives:
+   - Use `torch.jit.script_if` instead of Python if-statements on non-tensor values
+   - Replace Python lists/dictionaries with TorchScript-compatible `torch.List` and `torch.Dict`
+
+3. **Module Structure Changes**:
+   - Move helper functions inside the module class or declare them with `@torch.jit.script`
+   - Ensure any external function calls are to TorchScript-compatible functions
+
+4. **Remove Dynamic Attributes**: TorchScript doesn't support dynamically adding attributes to objects at runtime
+
+5. **Replace Unsupported Operations**: Replace operations like string formatting and print statements with TorchScript-compatible alternatives
 
 #### Performance Comparison
 
-| Model Type | GPU Inference Time | Speedup |
-|------------|-------------------|---------|
-| PyTorch (Eager) | 45.2 ms | 1.0x |
-| TorchScript (Traced) | 23.4 ms | 1.93x |
-| TorchScript (Scripted) | 24.1 ms | 1.87x |
+| Framework | CPU Latency (ms) | GPU Latency (ms) | CPU Speedup | GPU Speedup |
+|-----------|------------------|------------------|-------------|-------------|
+| PyTorch (Eager) | 292.45 | 18.73 | 1.0x | 1.0x |
+| TorchScript | 297.12 | 12.89 | 0.98x | **1.45x** |
+
+**Key Findings:**
+- **GPU Performance**: TorchScript provides ~1.45x speedup on GPU (18.73ms → 12.89ms)
+- **CPU Performance**: Minimal difference on CPU, slightly slower due to compilation overhead
+- **Recommendation**: Use TorchScript for GPU deployment for optimal inference performance
 
 **Convert Your Model:**
 ```bash
@@ -346,18 +364,18 @@ output = model(input_tensor)
 
 ### Training Metrics
 
-- **Final Training Loss**: ~4.2
-- **Final Validation Loss**: ~4.5
-- **Training Time**: ~2 hours on NVIDIA RTX 3090
-- **Convergence**: Achieved within 40-50 epochs
+- **Final Training Loss**: ~3.6
+- **Iterations**: 4000
+- **Best Performance**: Achieved with Adam optimizer, learning rate 0.00025, clip 25-50
+- **Training Environment**: GPU-accelerated training
 
 ### Model Performance
 
-- ✅ Successfully trained chatbot capable of generating contextually appropriate responses
-- ✅ Achieved convergence with optimized hyperparameters through systematic tuning
-- ✅ Performance improvement of ~1.93x with TorchScript conversion on GPU
-- ✅ Identified key hyperparameters affecting model convergence and quality
-- ✅ Stable training with gradient clipping and teacher forcing
+- Successfully trained chatbot capable of generating contextually appropriate responses
+- Achieved convergence with optimized hyperparameters (final loss: 3.60738)
+- Performance improvement of ~1.45x with TorchScript conversion on GPU
+- Identified key hyperparameters affecting model convergence: clip, learning_rate, and teacher_forcing_ratio
+- Stable training with gradient clipping and teacher forcing
 
 ### Qualitative Results
 
@@ -373,8 +391,14 @@ The model demonstrates:
 chatbot-seq2seq/
 ├── data/
 │   ├── cornell_movie_dialogs/    # Raw dataset
-│   ├── processed/                # Preprocessed data
-│   └── download_data.py          # Dataset download script
+│   │   ├── conversations.json
+│   │   ├── corpus.json
+│   │   ├── formatted_movie_lines.txt
+│   │   ├── index.json
+│   │   ├── speakers.json
+│   │   └── utterances.jsonl
+│   └── movie-corpus/              # Processed corpus
+│       └── movie-corpus.zip
 ├── models/
 │   ├── encoder.py                # Encoder architecture
 │   ├── decoder.py                # Decoder architecture
@@ -388,6 +412,7 @@ chatbot-seq2seq/
 ├── configs/
 │   ├── default_config.yaml       # Default configuration
 │   └── sweep_config.yaml         # W&B sweep configuration
+├── wandb/                        # Weights & Biases logs
 ├── checkpoints/                  # Saved model checkpoints
 ├── images/                       # Visualization images
 │   ├── hyperparameter_sweep.png
@@ -401,6 +426,7 @@ chatbot-seq2seq/
 ├── LICENSE
 └── README.md
 ```
+
 
 ## References
 
@@ -471,9 +497,11 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Contact
 
-Your Name - [@yourtwitter](https://twitter.com/yourtwitter) - your.email@example.com
+Shruti Tulshidas Pangare - stp8232@nyu.edu
 
 Project Link: [https://github.com/yourusername/chatbot-seq2seq](https://github.com/yourusername/chatbot-seq2seq)
+
+W&B Project: [chatbot-training](https://wandb.ai/stp8232-new-york-university/chatbot-training/sweeps/ven9ibbn?nw=nwuserstp8232)
 
 ---
 
