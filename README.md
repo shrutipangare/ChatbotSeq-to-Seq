@@ -1,4 +1,4 @@
-# Chatbot with Seq2Seq and Attention
+# Movie Dialog Conversational AI: Chatbot with Seq2Seq and Attention
 
 A PyTorch implementation of a conversational chatbot using sequence-to-sequence architecture with Luong attention mechanisms, trained on the Cornell Movie Dialogs Corpus.
 
